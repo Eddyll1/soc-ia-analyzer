@@ -16,10 +16,33 @@ del Bootcamp Analista SOC N2.
 | Ingesta + normalización (`backend/app/ingest/`) | ✅ Funcional |
 | Motor de reglas A–I (`backend/app/detection/`) | ✅ Funcional |
 | Correlación en incidentes | ✅ Funcional (determinística) |
-| Orquestador de agentes IA (Gemini) | ⬜ Pendiente |
-| Validador de citas | ⬜ Pendiente |
-| API FastAPI + SQLite | ⬜ Pendiente |
-| Frontend React + dashboard + PDF | ⬜ Pendiente |
+| Orquestador de agentes IA (Gemini) | ✅ Funcional (con modo mock offline) |
+| Validador de citas + defensas anti-inyección | ✅ Funcional |
+| API FastAPI + SQLite | ✅ Funcional |
+| Frontend React + dashboard + PDF | ✅ Funcional |
+
+## Puesta en marcha
+
+**Backend** (puerto 8000):
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # opcional: añade GEMINI_API_KEY (sin ella corre en modo mock)
+uvicorn app.main:app --reload
+```
+
+**Frontend** (puerto 5173):
+```bash
+cd frontend
+npm install
+cp .env.example .env          # VITE_API_URL=http://localhost:8000
+npm run dev
+```
+
+Flujo en la UI: **Cargar** (archivo + perfil) → **Dashboard** → **Incidentes** →
+**Informes** (pestañas Ejecutivo/Técnico + Exportar PDF) → **Seguridad** (registro
+de defensas IA) → **Historial**.
 
 ## Pipeline determinístico (ya usable por CLI)
 

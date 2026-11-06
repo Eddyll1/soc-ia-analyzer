@@ -1,0 +1,75 @@
+import { useState } from 'react'
+import { sevBadge } from '../lib/format'
+
+function Incident({ inc }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-lg">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-4 text-left">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-sky-400">{inc.code}</span>
+          <span className="px-2 py-0.5 rounded text-xs font-medium" style={sevBadge(inc.severity)}>{inc.severity}</span>
+          <span className="text-sm text-slate-300">{inc.narrative?.slice(0, 80) || 'Incidente correlacionado'}</span>
+        </div>
+        <span className="text-slate-500 text-sm">{inc.evidence?.length || 0} eventos · {open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-slate-800 pt-3">
+          {inc.narrative && <p className="text-sm text-slate-300">{inc.narrative}</p>}
+          {inc.justification && (
+            <div className="text-sm"><span className="text-slate-400">Clasificación: </span>{inc.justification}</div>
+          )}
+          {inc.recommended_action && (
+            <div className="text-sm"><span className="text-slate-400">Acción: </span>{inc.recommended_action}</div>
+          )}
+          {inc.mitre?.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {inc.mitre.map((m) => <span key={m} className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded">{m}</span>)}
+            </div>
+          )}
+          {inc.timeline?.length > 0 && (
+            <div>
+              <div className="text-xs text-slate-400 mb-1">Línea de tiempo</div>
+              <div className="space-y-1">
+                {inc.timeline.map((t, i) => (
+                  <div key={i} className="text-xs flex gap-2">
+                    <span className="font-mono text-sky-400 shrink-0">{t.log_id}</span>
+                    <span className="text-slate-500 shrink-0">{t.phase}</span>
+                    <span className="text-slate-300">{t.fact}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <details className="text-xs">
+            <summary className="text-slate-400 cursor-pointer">Evidencia ({inc.evidence?.length || 0} Log_ID)</summary>
+            <div className="font-mono text-slate-500 mt-1 break-all">{(inc.evidence || []).join(', ')}</div>
+          </details>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function IncidentList({ data }) {
+  if (!data) return null
+  return (
+    <div className="space-y-3">
+      {data.incidents.map((inc) => <Incident key={inc.code} inc={inc} />)}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div className="text-sm text-slate-300 mb-2">Indicadores de compromiso (IoC)</div>
+        <table className="text-xs w-full">
+          <tbody>
+            {data.iocs.map((i, k) => (
+              <tr key={k} className="border-t border-slate-800">
+                <td className="py-1 text-slate-500 w-16">{i.type}</td>
+                <td className="py-1 font-mono text-slate-300">{i.value}</td>
+                <td className="py-1 text-slate-500">{i.context}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

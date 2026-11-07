@@ -15,7 +15,18 @@ function Incident({ inc }) {
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-slate-800 pt-3">
-          {inc.narrative && <p className="text-sm text-slate-300">{inc.narrative}</p>}
+          {inc.narrative && (
+            <div>
+              <div className="text-xs text-slate-400 mb-1">Resumen del incidente</div>
+              <p className="text-sm text-slate-200 leading-relaxed">{inc.narrative}</p>
+            </div>
+          )}
+          {inc.ai_narrative && (
+            <div className="bg-sky-950/30 border border-sky-900/50 rounded p-2">
+              <div className="text-xs text-sky-400 mb-1">Narrativa IA (Gemini)</div>
+              <p className="text-sm text-slate-200 leading-relaxed">{inc.ai_narrative}</p>
+            </div>
+          )}
           {inc.justification && (
             <div className="text-sm"><span className="text-slate-400">Clasificación: </span>{inc.justification}</div>
           )}
@@ -29,13 +40,18 @@ function Incident({ inc }) {
           )}
           {inc.timeline?.length > 0 && (
             <div>
-              <div className="text-xs text-slate-400 mb-1">Línea de tiempo ({inc.timeline.length} eventos)</div>
+              <div className="text-xs text-slate-400 mb-1">
+                Línea de tiempo · hitos ({inc.timeline.length}) de {inc.event_count} eventos
+              </div>
               <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
                 {inc.timeline.map((t, i) => (
-                  <div key={i} className="text-xs grid grid-cols-[130px_80px_70px_1fr] gap-2 items-baseline border-b border-slate-800/50 py-0.5">
-                    <span className="font-mono text-amber-300 shrink-0">{t.ts || '—'}</span>
-                    <span className="font-mono text-sky-400 shrink-0">{t.log_id}</span>
-                    <span className="font-mono text-slate-500 shrink-0">{t.event_id}</span>
+                  <div key={i} className="text-xs grid grid-cols-[160px_60px_1fr] gap-2 items-baseline border-b border-slate-800/50 py-1">
+                    <span className="font-mono text-amber-300 shrink-0">
+                      {t.ts_start}{t.count > 1 ? ` → ${t.ts_end}` : ''}
+                    </span>
+                    <span className="font-mono text-slate-400 shrink-0">
+                      {t.count > 1 ? `${t.count}×` : ''} {t.event_id}
+                    </span>
                     <span className="text-slate-300">
                       {t.host && <span className="text-slate-500">{t.host} · </span>}
                       {t.fact}

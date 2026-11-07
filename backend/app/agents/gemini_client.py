@@ -70,7 +70,7 @@ class GeminiClient:
                 )
                 resp = self._model.generate_content(
                     [system, data_block], generation_config=cfg,
-                    request_options={"timeout": 60},
+                    request_options={"timeout": 120},
                 )
                 return resp.text or ""
             except Exception as e:

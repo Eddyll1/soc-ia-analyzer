@@ -58,43 +58,95 @@ def _build_timeline(df: pd.DataFrame, log_ids: list[str]) -> list[dict]:
     return tl
 
 
-def _sanitize_payload(df: pd.DataFrame, incidents: list[Incident], sentinel: str,
+def _collapse_milestones(timeline: list[dict]) -> list[dict]:
+    """Agrupa corridas consecutivas de eventos iguales en hitos legibles.
+
+    Evita volcar 100+ filas casi idénticas: 33 fallos seguidos se vuelven un
+    solo hito "08:25–08:31 · 33× 4625 fallo de login desde 203.0.113.74".
+    """
+    if not timeline:
+        return []
+    ms: list[dict] = []
+    cur = None
+    for e in timeline:
+        key = (e.get("event_id"), e.get("host"), e.get("src_ip"), e.get("fact"))
+        if cur and cur["_key"] == key:
+            cur["count"] += 1
+            cur["ts_end"] = e.get("ts")
+            cur["log_ids"].append(e.get("log_id"))
+        else:
+            if cur:
+                ms.append(cur)
+            cur = {"_key": key, "count": 1, "ts_start": e.get("ts"), "ts_end": e.get("ts"),
+                   "event_id": e.get("event_id"), "host": e.get("host"),
+                   "src_ip": e.get("src_ip"), "user": e.get("user"),
+                   "fact": e.get("fact"), "log_ids": [e.get("log_id")]}
+    if cur:
+        ms.append(cur)
+    for m in ms:
+        m.pop("_key", None)
+        m["log_ref"] = m["log_ids"][0] + (f"…{m['log_ids'][-1]}" if m["count"] > 1 else "")
+    return ms
+
+
+def _narrative(incident: Incident, timeline: list[dict]) -> str:
+    """Relato en cadena construido por código (hechos, no inventado por la IA)."""
+    t0 = timeline[0]["ts"] if timeline else "?"
+    t1 = timeline[-1]["ts"] if timeline else "?"
+    by_rule = {}
+    for f in incident.findings:
+        by_rule.setdefault(f.rule_id, []).append(f)
+    parts = [f"Incidente {incident.id}: actividad entre {t0} y {t1}."]
+
+    order = ["WEB_ATTACK", "WEB_SHELL", "BRUTE_FORCE_SPRAY", "BRUTE_FORCE",
+             "SUCCESS_AFTER_FAILS", "PRIV_ESCALATION", "SUSPICIOUS_EXEC",
+             "PERSIST_SERVICE", "PERSIST_TASK", "DISCOVERY", "LATERAL_MOVEMENT",
+             "DATA_COLLECTION", "STAGING_EXFIL", "OUTBOUND_EXFIL"]
+    for rid in order:
+        for f in by_rule.get(rid, []):
+            ev_ts = [e["ts"] for e in timeline if e["log_id"] in f.evidence]
+            span = f" ({ev_ts[0]}→{ev_ts[-1]})" if len(ev_ts) > 1 else (f" ({ev_ts[0]})" if ev_ts else "")
+            parts.append(f"{f.summary}{span} [{', '.join(f.evidence[:3])}{'…' if len(f.evidence) > 3 else ''}].")
+    return " ".join(parts)
+
+
+def _sanitize_payload(incidents: list[Incident], timelines: dict, sentinel: str,
                       security_log: list[dict]) -> tuple[str, list[dict], set[str]]:
-    """Construye el bloque de datos saneado y detecta inyecciones en los logs."""
-    fields = ["Log_ID", "Timestamp", "Host_Normalized", "User_Normalized",
-              "Event_ID", "Source_IP", "Destination", "Event_Description",
-              "Process_CommandLine", "Result"]
+    """Bloque COMPACTO para la IA: resúmenes de hallazgos + hitos, no logs crudos."""
     hint_incidents: list[dict] = []
     valid_ids: set[str] = set()
-    lines: list[str] = []
+    compact: list[dict] = []
 
     for inc in incidents:
         ev = inc.evidence()
         valid_ids.update(ev)
-        rows = _evidence_rows(df, ev)
         flags: list[str] = []
-        for _, r in rows.iterrows():
-            rec = {}
-            for f in fields:
-                val = r.get(f)
-                clean = neutralize(val)
-                rec[f] = clean
-                hits = scan_injection(str(val))
-                if hits:
-                    flags.append(f"{r['Log_ID']}: {hits[:3]}")
-                    security_log.append({"type": "injection_detected",
-                                         "log_id": r["Log_ID"], "field": f, "matches": hits[:3]})
-            lines.append(str(rec))
-        hint_incidents.append({
-            "id": inc.id,
-            "evidence": ev,
-            "hosts": inc.entities.get("hosts", []) + inc.entities.get("host", []),
-            "severity_hint_es": _SEV_ES.get(inc.max_severity_hint, "Medio"),
-            "injection_flags": flags,
-            "rule_ids": sorted({f.rule_id for f in inc.findings}),
-        })
+        findings_c = []
+        for f in inc.findings:
+            s = neutralize(f.summary)
+            hits = scan_injection(f.summary)
+            if hits:
+                flags.append(f"{f.rule_id}: {hits[:3]}")
+                security_log.append({"type": "injection_detected", "rule": f.rule_id, "matches": hits[:3]})
+            findings_c.append({"rule": f.rule_id, "summary": s, "evidence": f.evidence[:5]})
+        # hitos ya neutralizados en el timeline; escaneamos sus 'fact'
+        ms = timelines[inc.id]
+        for m in ms:
+            hits = scan_injection(str(m.get("fact")))
+            if hits:
+                security_log.append({"type": "injection_detected", "log_id": m.get("log_ref"), "matches": hits[:3]})
+        compact.append({"id": inc.id, "severity_hint_es": _SEV_ES.get(inc.max_severity_hint, "Medio"),
+                        "findings": findings_c,
+                        "milestones": [{"t": f"{m['ts_start']}→{m['ts_end']}", "n": m["count"],
+                                        "event_id": m["event_id"], "host": m["host"],
+                                        "src_ip": m["src_ip"], "fact": m["fact"]} for m in ms]})
+        hint_incidents.append({"id": inc.id, "evidence": ev,
+                               "hosts": inc.entities.get("hosts", []) + inc.entities.get("host", []),
+                               "severity_hint_es": _SEV_ES.get(inc.max_severity_hint, "Medio"),
+                               "injection_flags": flags,
+                               "rule_ids": sorted({f.rule_id for f in inc.findings})})
 
-    block = (f"{sentinel}\n" + "\n".join(lines) + f"\n{sentinel}")
+    block = f"{sentinel}\n{compact}\n{sentinel}"
     return block, hint_incidents, valid_ids
 
 
@@ -104,7 +156,12 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
     security_log: list[dict] = []
     sentinel = "DATA-" + secrets.token_hex(8)       # centinela aleatorio por ejecución
 
-    block, hint_incidents, valid_ids = _sanitize_payload(df, incidents, sentinel, security_log)
+    # Timelines y relato se construyen SIEMPRE por código (no dependen de la IA).
+    full_timelines = {inc.id: _build_timeline(df, inc.evidence()) for inc in incidents}
+    milestones = {inc.id: _collapse_milestones(full_timelines[inc.id]) for inc in incidents}
+    code_narrative = {inc.id: _narrative(inc, full_timelines[inc.id]) for inc in incidents}
+
+    block, hint_incidents, valid_ids = _sanitize_payload(incidents, milestones, sentinel, security_log)
     sys_base = prompts.SYSTEM_PREAMBLE.format(sentinel=sentinel)
 
     def _call(role_prompt: str, hint: dict) -> dict | None:
@@ -127,12 +184,15 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
     report.incidents = []
     for inc in incidents:
         n = narr_by_inc.get(inc.id, {})
+        ai_narr = (n.get("narrative") or "").strip()
         report.incidents.append({
             "id": inc.id,
-            "narrative": n.get("narrative", ""),
+            "narrative": code_narrative[inc.id],       # relato factual (siempre)
+            "ai_narrative": ai_narr if client.mode == "live" else "",  # prosa IA (opcional)
             "mitre": n.get("mitre", []),
             "confidence": n.get("confidence"),
-            "timeline": _build_timeline(df, inc.evidence()),
+            "timeline": milestones[inc.id],            # hitos condensados
+            "event_count": len(full_timelines[inc.id]),
         })
 
     cls = _call(prompts.CLASSIFIER, {"incidents": hint_incidents})

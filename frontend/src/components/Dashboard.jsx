@@ -60,13 +60,15 @@ export default function Dashboard({ data }) {
         <Panel title="Incidentes por criticidad">
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={sevData} dataKey="value" nameKey="name" outerRadius={75}
-                label={({ name, value }) => `${name}: ${value}`} labelLine={{ stroke: '#64748b' }}>
+              <Pie data={sevData} dataKey="value" nameKey="name" cx="38%" outerRadius={80}>
                 {sevData.map((e) => <Cell key={e.name} fill={sevColor(e.name)} />)}
               </Pie>
               <Tooltip {...TOOLTIP} />
-              <Legend verticalAlign="bottom" height={28}
-                formatter={(v) => <span style={{ color: sevColor(v) }}>{v}</span>} />
+              <Legend layout="vertical" verticalAlign="middle" align="right" iconType="square"
+                formatter={(v) => {
+                  const d = sevData.find((x) => x.name === v)
+                  return <span style={{ color: sevColor(v) }}>{v}: {d?.value ?? 0}</span>
+                }} />
             </PieChart>
           </ResponsiveContainer>
         </Panel>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { sevBadge } from '../lib/format'
+import PlaybookActions from './PlaybookActions'
 
 function Incident({ inc }) {
   const [open, setOpen] = useState(false)
@@ -59,6 +60,7 @@ function Incident({ inc }) {
                   )}
                 </div>
               </div>
+              <PlaybookActions affected={inc.affected} />
             </div>
           )}
           {inc.impact && <div className="text-sm"><span className="text-slate-400">Impacto: </span>{inc.impact}</div>}

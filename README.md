@@ -9,6 +9,16 @@ del Bootcamp Analista SOC N2.
 > hallazgo se rastrea a uno o más `Log_ID` del Excel. Un validador de citas
 > confirma que ningún `Log_ID` mencionado por la IA sea inventado.
 
+## Alcance y trabajo futuro
+
+Los **botones de respuesta** (Aislar host, Resetear credenciales, Bloquear IP) son
+**simulaciones etiquetadas como DEMO**: muestran la llamada que se enviaría a un
+EDR/Firewall/AD, pero **no ejecutan ninguna acción real**. La integración real de
+contención con un click (CrowdStrike Falcon, firewall, Active Directory, un SOAR) y
+el enriquecimiento automático de IoCs (VirusTotal, etc.) quedan como alcance de un
+proyecto más amplio y a largo plazo. Este repositorio es una **prueba de concepto**
+del flujo de análisis e investigación asistida por IA.
+
 ## Estado actual
 
 | Capa | Estado |

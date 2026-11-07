@@ -35,6 +35,10 @@ export default function Dashboard({ data }) {
   data.incidents.forEach((i) => { sevDist[i.severity] = (sevDist[i.severity] || 0) + 1 })
   const sevData = Object.entries(sevDist).map(([name, value]) => ({ name, value }))
 
+  const rank = { 'Crítico': 4, 'Alto': 3, 'Medio': 2, 'Bajo': 1 }
+  const top = [...data.incidents].sort((a, b) => (rank[b.severity] || 0) - (rank[a.severity] || 0))[0]
+  const topHost = top?.affected?.hosts?.[0]
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -44,6 +48,19 @@ export default function Dashboard({ data }) {
         <Card label="Hallazgos" value={data.findings.length} />
         <Card label="IoCs" value={data.iocs.length} />
       </div>
+
+      {top && (
+        <div className="rounded-lg p-4 border" style={{ borderColor: sevColor(top.severity) + '66', background: sevColor(top.severity) + '12' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <span className="font-semibold" style={{ color: sevColor(top.severity) }}>Prioridad de respuesta:</span>
+            <span className="text-sm text-slate-200">
+              atender <span className="font-mono text-sky-300">{top.code}</span> ({top.severity})
+              {topHost && <> — aislar primero <span className="font-mono text-red-300">{topHost}</span></>}
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         <Panel title="Eventos por hora">

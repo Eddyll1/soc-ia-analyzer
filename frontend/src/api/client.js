@@ -19,4 +19,5 @@ export const analyze = (analysisId, profile) => {
 
 export const listAnalyses = () => api.get('/api/analyses').then((r) => r.data)
 export const getAnalysis = (id) => api.get(`/api/analysis/${id}`).then((r) => r.data)
+export const getEvents = (id) => api.get(`/api/analysis/${id}/events`).then((r) => r.data)
 export const deleteAnalysis = (id) => api.delete(`/api/analysis/${id}`).then((r) => r.data)

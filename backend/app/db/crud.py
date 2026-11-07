@@ -147,6 +147,17 @@ def get_full_analysis(db: Session, analysis_id: int) -> dict | None:
     })
 
 
+def get_events(db: Session, analysis_id: int) -> list[dict]:
+    """Eventos normalizados de un análisis (para filtrado interactivo en el front)."""
+    rows = (db.query(models.Event)
+            .filter(models.Event.analysis_id == analysis_id)
+            .order_by(models.Event.timestamp).all())
+    return [{"log_id": e.log_id, "timestamp": e.timestamp, "host": e.host,
+             "event_id": e.event_id, "user": e.user, "source_ip": e.source_ip,
+             "destination": e.destination, "log_source": e.log_source,
+             "result": e.result, "severity": e.severity} for e in rows]
+
+
 def list_analyses(db: Session) -> list[dict]:
     rows = db.query(models.Analysis).order_by(models.Analysis.id.desc()).all()
     return [{"id": a.id, "filename": a.filename, "status": a.status, "profile": a.profile,

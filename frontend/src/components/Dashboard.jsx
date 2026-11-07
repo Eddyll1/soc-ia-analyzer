@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import { sevColor } from '../lib/format'
 import ActionPlan from './ActionPlan'
+import EventsExplorer from './EventsExplorer'
 
 const TOOLTIP = {
   contentStyle: { background: '#0f172a', border: '1px solid #334155', borderRadius: 6 },
@@ -62,59 +63,24 @@ export default function Dashboard({ data }) {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <Panel title="Eventos por hora">
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={byHour}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="hour" stroke="#64748b" fontSize={11} />
-              <YAxis stroke="#64748b" fontSize={11} />
-              <Tooltip {...TOOLTIP} />
-              <Line type="monotone" dataKey="n" stroke="#38bdf8" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </Panel>
+      <Panel title="Incidentes por criticidad">
+        <ResponsiveContainer width="100%" height={220}>
+          <PieChart>
+            <Pie data={sevData} dataKey="value" nameKey="name" cx="38%" outerRadius={80}>
+              {sevData.map((e) => <Cell key={e.name} fill={sevColor(e.name)} />)}
+            </Pie>
+            <Tooltip {...TOOLTIP} />
+            <Legend layout="vertical" verticalAlign="middle" align="right" iconType="square"
+              formatter={(v) => {
+                const d = sevData.find((x) => x.name === v)
+                return <span style={{ color: sevColor(v) }}>{v}: {d?.value ?? 0}</span>
+              }} />
+          </PieChart>
+        </ResponsiveContainer>
+      </Panel>
 
-        <Panel title="Incidentes por criticidad">
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={sevData} dataKey="value" nameKey="name" cx="38%" outerRadius={80}>
-                {sevData.map((e) => <Cell key={e.name} fill={sevColor(e.name)} />)}
-              </Pie>
-              <Tooltip {...TOOLTIP} />
-              <Legend layout="vertical" verticalAlign="middle" align="right" iconType="square"
-                formatter={(v) => {
-                  const d = sevData.find((x) => x.name === v)
-                  return <span style={{ color: sevColor(v) }}>{v}: {d?.value ?? 0}</span>
-                }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </Panel>
-
-        <Panel title="Top tipos de evento (Event_ID)">
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={byEvent} layout="vertical" margin={{ left: 20 }}>
-              <XAxis type="number" stroke="#64748b" fontSize={11} />
-              <YAxis type="category" dataKey="id" stroke="#64748b" fontSize={11} width={90} />
-              <Tooltip {...TOOLTIP} />
-              <Bar dataKey="n" fill="#818cf8" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Panel>
-
-        <Panel title="Top IPs con fallos de login">
-          <table className="text-sm w-full">
-            <tbody>
-              {Object.entries(s.top_failed_ips || {}).map(([ip, n]) => (
-                <tr key={ip} className="border-t border-slate-800">
-                  <td className="py-1.5 font-mono text-slate-300">{ip}</td>
-                  <td className="py-1.5 text-right text-orange-400">{n} fallos</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
-      </div>
+      {/* Explorador de eventos con filtros interactivos + tabla paginada */}
+      <EventsExplorer analysisId={data.id} />
 
       {(data.limitations?.length > 0) && (
         <Panel title="Limitaciones declaradas del análisis">

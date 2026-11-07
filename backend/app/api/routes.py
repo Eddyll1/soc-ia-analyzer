@@ -72,6 +72,11 @@ def analyses(db: Session = Depends(get_db)):
     return crud.list_analyses(db)
 
 
+@router.get("/analysis/{analysis_id}/events")
+def events(analysis_id: int, db: Session = Depends(get_db)):
+    return crud.get_events(db, analysis_id)
+
+
 @router.get("/analysis/{analysis_id}")
 def analysis(analysis_id: int, db: Session = Depends(get_db)):
     data = crud.get_full_analysis(db, analysis_id)

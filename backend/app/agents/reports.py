@@ -8,7 +8,7 @@ mitigación/hardening). Se construyen SIEMPRE por código; Gemini solo los pule.
 from __future__ import annotations
 
 _RANK = {"Crítico": 4, "Alto": 3, "Medio": 2, "Bajo": 1}
-_EMOJI = {"Crítico": "🔴", "Alto": "🟠", "Medio": "🟡", "Bajo": "🟢"}
+_COLOR = {"Crítico": "#dc2626", "Alto": "#ea580c", "Medio": "#ca8a04", "Bajo": "#16a34a"}
 
 
 def _risk_rank(r: str) -> int:
@@ -16,16 +16,18 @@ def _risk_rank(r: str) -> int:
 
 
 def _badge(risk: str) -> str:
-    return f"{_EMOJI.get(risk, '⚪')} {risk}"
+    """Severidad como texto coloreado (sin emojis: no dependen de fuentes del PDF)."""
+    color = _COLOR.get(risk, "#64748b")
+    return f'<span style="color:{color};font-weight:700">{risk}</span>'
 
 
 def _ioc_severity(ioc: dict) -> str:
     v = str(ioc.get("value", "")).lower()
     if "wuhelper" in v or "encodedcommand" in v:
-        return "🔴 Crítico"
+        return "Crítico"
     if ioc.get("type") == "ip":
-        return "🟠 Alto"
-    return "🟡 Medio"
+        return "Alto"
+    return "Medio"
 
 
 # ---- Contención y lecciones derivadas de las reglas que dispararon ----
@@ -81,7 +83,7 @@ def build_executive(ctx: dict) -> str:
     exfil = any("Exfiltración" in [p["phase"] for p in i.get("phases", [])] for i in incs)
     L: list[str] = []
 
-    L += ["# 🛡️ Informe Ejecutivo de Seguridad", "",
+    L += ["# Informe Ejecutivo de Seguridad", "",
           f"**Ventana analizada:** {stats.get('time_start')} — {stats.get('time_end')} (UTC)  ",
           f"**Clasificación del documento:** Confidencial · **Preparado por:** SOC / Inteligencia Operativa", "",
           "---", ""]
@@ -153,7 +155,7 @@ def build_technical(ctx: dict) -> str:
         all_rules |= set(i.get("rule_ids", []))
 
     L: list[str] = []
-    L += ["# 🧪 Informe Técnico de Respuesta a Incidentes", "",
+    L += ["# Informe Técnico de Respuesta a Incidentes", "",
           f"**Ventana:** {stats.get('time_start')} — {stats.get('time_end')} (UTC) · "
           f"**Perfil:** {ctx.get('profile')} · **Eventos:** {stats.get('total_events')}  ",
           "**Fuentes:** export SIEM (Security, System, Proxy, IIS, PowerShell, Firewall). "
@@ -184,27 +186,13 @@ def build_technical(ctx: dict) -> str:
             L.append(f"| {rango} | {p['phase']} | {p['detail']} | {ev} |")
         L.append("")
 
-    # 3. Análisis de Telemetría y Vectores (consultas SIEM de validación)
-    all_ext = sorted({ip for i in incs for ip in i.get("affected", {}).get("external_ips", [])})
+    # 3. Análisis de Telemetría y Vectores (consultas SIEM/EDR de validación)
     L += ["## 3. Análisis de Telemetría y Vectores", "",
           "Vectores observados: fuerza bruta/credential stuffing, uso de credenciales válidas, ejecución "
           "ofuscada (PowerShell `-EncodedCommand`), persistencia por servicio/tarea y exfiltración por canal "
-          "saliente. Consultas de validación sugeridas:", "",
-          "```sql", "-- QRadar AQL: actividad de las IPs atacantes en 24h"]
-    if all_ext:
-        ips_sql = "', '".join(all_ext)
-        L.append(f"SELECT sourceip, destinationip, username, eventcount "
-                 f"FROM events WHERE sourceip IN ('{ips_sql}') LAST 24 HOURS")
-    L += ["```", "",
-          "```powershell",
-          "# CrowdStrike/EDR: localizar el binario de persistencia en los hosts",
-          "Get-ChildItem -Path 'C:\\ProgramData\\wuhelper.exe' -ErrorAction SilentlyContinue |",
-          "  Select-Object FullName, Length, CreationTimeUtc",
-          "```", "",
-          "```bash",
-          "# Firewall/Proxy: conexiones salientes a los destinos de exfiltración",
-          "grep -E '198\\.51\\.100\\.88|203\\.0\\.113\\.88' /var/log/firewall/egress.log",
-          "```", ""]
+          "saliente. Consultas de validación sugeridas:", ""]
+    for q in validation_queries(incs):
+        L += [f"*{q['title']}*", "", f"```{q['lang']}", q["code"], "```", ""]
 
     # 4. Indicadores de Compromiso (IoCs) con severidad
     L += ["## 4. Indicadores de Compromiso (IoCs)", "",
@@ -216,7 +204,7 @@ def build_technical(ctx: dict) -> str:
         if key in seen:
             continue
         seen.add(key)
-        L.append(f"| {ioc['type']} | `{ioc['value']}` | {ioc.get('context','')} | {_ioc_severity(ioc)} |")
+        L.append(f"| {ioc['type']} | `{ioc['value']}` | {ioc.get('context','')} | {_badge(_ioc_severity(ioc))} |")
     L.append("")
 
     # 5. Acciones de Mitigación, Hardening y Recomendaciones
@@ -244,3 +232,57 @@ def build_technical(ctx: dict) -> str:
         for x in lim:
             L.append(f"- {x}")
     return "\n".join(L)
+
+
+# =============================== PLAN DE ACCIÓN (dashboard) ===============================
+_EXFIL_NOTE = "Sin destinos de exfiltración observados."
+
+
+def validation_queries(incidents: list[dict]) -> list[dict]:
+    """Consultas de validación derivadas de los datos (IPs, destinos y binarios reales)."""
+    ext = sorted({ip for i in incidents for ip in i.get("affected", {}).get("external_ips", [])})
+    dest = sorted({d for i in incidents for d in i.get("affected", {}).get("exfil_dest", [])})
+    out: list[dict] = []
+    if ext:
+        ips_sql = "', '".join(ext)
+        out.append({"title": "QRadar AQL: actividad de las IPs atacantes en 24h", "lang": "sql",
+                    "code": "SELECT sourceip, destinationip, username, eventcount FROM events "
+                            f"WHERE sourceip IN ('{ips_sql}') LAST 24 HOURS"})
+    out.append({"title": "CrowdStrike/EDR: localizar el binario de persistencia en los hosts",
+                "lang": "powershell",
+                "code": "Get-ChildItem -Path 'C:\\ProgramData\\wuhelper.exe' -ErrorAction SilentlyContinue |\n"
+                        "  Select-Object FullName, Length, CreationTimeUtc"})
+    if dest:
+        pat = "|".join(d.split(":")[0].replace(".", "\\.") for d in dest)
+        out.append({"title": "Firewall/Proxy: conexiones salientes a los destinos de exfiltración",
+                    "lang": "bash", "code": f"grep -E '{pat}' /var/log/firewall/egress.log"})
+    return out
+
+
+def _incident_actions(inc: dict) -> list[str]:
+    return _containment(set(inc.get("rule_ids", [])), inc.get("affected", {}))
+
+
+def mitigation_plan(incidents: list[dict], iocs: list[dict]) -> dict:
+    """Plan de acción estructurado para la vista de dashboard (mismo contenido que el informe técnico).
+
+    incidents: [{id, risk, rule_ids, affected}]; iocs: [{type, value, context}].
+    """
+    all_rules: set[str] = set()
+    for i in incidents:
+        all_rules |= set(i.get("rule_ids", []))
+    seen, iocs_out = set(), []
+    for ioc in iocs:
+        key = (ioc.get("type"), ioc.get("value"))
+        if key in seen:
+            continue
+        seen.add(key)
+        iocs_out.append({"type": ioc.get("type"), "value": ioc.get("value"),
+                         "context": ioc.get("context", ""), "severity": _ioc_severity(ioc)})
+    return {
+        "incidents": [{"id": i["id"], "risk": i.get("risk"), "actions": _incident_actions(i)}
+                      for i in incidents],
+        "lessons": _lessons(all_rules),
+        "iocs": iocs_out,
+        "queries": validation_queries(incidents),
+    }

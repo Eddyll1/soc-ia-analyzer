@@ -7,6 +7,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from . import models
+from ..agents import reports
 
 
 def _json_safe(obj):
@@ -116,6 +117,13 @@ def get_full_analysis(db: Session, analysis_id: int) -> dict | None:
     a = db.get(models.Analysis, analysis_id)
     if not a:
         return None
+    rules_by_inc: dict[str, set[str]] = {}
+    for f in a.findings:
+        if f.incident_id:
+            rules_by_inc.setdefault(f.incident_id, set()).add(f.rule_id)
+    iocs = [{"type": i.type, "value": i.value, "context": i.context} for i in a.iocs]
+    inc_dicts = [{"id": i.code, "risk": i.severity, "affected": i.entities_json or {},
+                  "rule_ids": sorted(rules_by_inc.get(i.code, set()))} for i in a.incidents]
     return _json_safe({
         "id": a.id, "filename": a.filename, "status": a.status, "profile": a.profile,
         "uploaded_at": a.uploaded_at.isoformat() if a.uploaded_at else None,
@@ -133,7 +141,8 @@ def get_full_analysis(db: Session, analysis_id: int) -> dict | None:
                        "justification": i.justification, "impact": i.impact,
                        "recommended_action": i.recommended_action}
                       for i in a.incidents],
-        "iocs": [{"type": i.type, "value": i.value, "context": i.context} for i in a.iocs],
+        "iocs": iocs,
+        "mitigation": reports.mitigation_plan(inc_dicts, iocs),
         "reports": {r.kind: r.content_md for r in a.reports},
     })
 

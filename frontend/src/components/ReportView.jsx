@@ -89,8 +89,9 @@ export default function ReportView({ data }) {
           ))}
         </div>
         <button onClick={exportPdf} disabled={busy}
+          title="Abre el diálogo de impresión: elige 'Guardar como PDF'"
           className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-sm">
-          {busy ? 'Generando...' : 'Exportar PDF'}
+          {busy ? 'Preparando...' : 'Exportar PDF'}
         </button>
       </div>
       <div className="bg-white rounded-lg p-6 max-w-none">

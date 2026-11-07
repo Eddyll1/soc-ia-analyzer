@@ -75,6 +75,7 @@ es MEJORAR su redacción SIN cambiar los hechos ni los Log_ID:
 - Mejora la prosa de introducción y conclusiones para que el ejecutivo "venda" a
   la alta gerencia (claro, orientado a decisiones) y el técnico guíe la operación.
 - NO inventes datos nuevos ni Log_ID. NO borres secciones.
+- NO uses emojis ni símbolos decorativos: el informe se imprime en PDF.
 Salida JSON EXACTA: {"ejecutivo_md":"<markdown>","tecnico_md":"<markdown>"}
 """
 

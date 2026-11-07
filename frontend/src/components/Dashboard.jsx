@@ -3,6 +3,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend,
 } from 'recharts'
 import { sevColor } from '../lib/format'
+import ActionPlan from './ActionPlan'
 
 const TOOLTIP = {
   contentStyle: { background: '#0f172a', border: '1px solid #334155', borderRadius: 6 },
@@ -105,6 +106,10 @@ export default function Dashboard({ data }) {
           </ul>
         </Panel>
       )}
+
+      <div className="border-t border-slate-800 pt-4 mt-2">
+        <ActionPlan data={data} />
+      </div>
     </div>
   )
 }

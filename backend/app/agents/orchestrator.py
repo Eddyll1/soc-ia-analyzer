@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from ..detection.correlate import Incident
-from . import prompts
+from ..detection.rules import _is_external
+from . import prompts, reports
 from .gemini_client import GeminiClient
 from .validators import (
     enforce_severity_floor, neutralize, parse_strict_json,
@@ -38,6 +39,24 @@ class AgentReport:
 
 def _evidence_rows(df: pd.DataFrame, log_ids: list[str]) -> pd.DataFrame:
     return df[df["Log_ID"].isin(log_ids)]
+
+
+def _affected(df: pd.DataFrame, incident: Incident) -> dict:
+    """Entidades afectadas para decisiones del SOC: hosts+IPs (aislar), usuarios (resetear)."""
+    rows = _evidence_rows(df, incident.evidence())
+    hosts = sorted(x for x in rows["Host_Normalized"].dropna().unique())
+    users = sorted(x for x in rows["User_Normalized"].dropna().unique())
+    ips = sorted(x for x in rows["Source_IP"].dropna().unique() if x and x != "-")
+    host_ips = {}
+    for h, g in rows.groupby("Host_Normalized"):
+        host_ips[h] = sorted(x for x in g["Source_IP"].dropna().unique() if x and x != "-")
+    dest = sorted({d for f in incident.findings for d in (f.entity.get("dest") or [])})
+    return {
+        "hosts": hosts, "users": users,
+        "external_ips": [i for i in ips if _is_external(i)],
+        "internal_ips": [i for i in ips if not _is_external(i)],
+        "host_ips": host_ips, "exfil_dest": dest,
+    }
 
 
 def _build_timeline(df: pd.DataFrame, log_ids: list[str]) -> list[dict]:
@@ -223,15 +242,16 @@ def _sanitize_payload(incidents: list[Incident], timelines: dict, sentinel: str,
 
 
 def run_agents(df: pd.DataFrame, incidents: list[Incident],
-               client: GeminiClient | None = None) -> AgentReport:
+               client: GeminiClient | None = None, *, det=None, ing=None) -> AgentReport:
     client = client or GeminiClient()
     security_log: list[dict] = []
     sentinel = "DATA-" + secrets.token_hex(8)       # centinela aleatorio por ejecución
 
-    # Timelines y relato se construyen SIEMPRE por código (no dependen de la IA).
+    # Timelines, relato y entidades afectadas: SIEMPRE por código (no dependen de la IA).
     full_timelines = {inc.id: _build_timeline(df, inc.evidence()) for inc in incidents}
     milestones = {inc.id: _collapse_milestones(full_timelines[inc.id]) for inc in incidents}
     code_narrative = {inc.id: _narrative(inc, full_timelines[inc.id]) for inc in incidents}
+    affected = {inc.id: _affected(df, inc) for inc in incidents}
 
     block, hint_incidents, valid_ids = _sanitize_payload(incidents, milestones, sentinel, security_log)
     sys_base = prompts.SYSTEM_PREAMBLE.format(sentinel=sentinel)
@@ -267,7 +287,10 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
             "headline": narr["headline"],
             "window": narr["window"],
             "phases": narr["phases"],
-            "ai_narrative": "",                       # la IA la añade abajo si está live
+            "affected": affected[inc.id],
+            "rule_ids": sorted(rule_by_inc.get(inc.id, [])),
+            "risk": risk,
+            "ai_narrative": "",
             "timeline": milestones[inc.id],
             "event_count": len(full_timelines[inc.id]),
         })
@@ -278,14 +301,31 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
             "recommended_action": "Contener hosts/IPs afectados, resetear cuentas comprometidas.",
         })
 
-    # --- Única parte con IA: redactar los dos informes (2 llamadas) ---
-    ctx = {"incidentes": [{"id": i["id"], "titular": i["headline"], "ventana": i["window"],
-                           "riesgo": next(c["risk"] for c in report.classifications if c["incident_id"] == i["id"]),
-                           "fases": i["phases"]} for i in report.incidents]}
-    ex = _call(prompts.REDACTOR_EJECUTIVO, ctx)
-    report.executive_md = ex.get("markdown", "") if ex else ""
-    tec = _call(prompts.REDACTOR_TECNICO, ctx)
-    report.technical_md = tec.get("markdown", "") if tec else ""
+    # --- Informes: SIEMPRE se construyen por código (ricos, estructurados) ---
+    stats = det.stats if det else {}
+    report_ctx = {"incidents": report.incidents, "stats": stats,
+                  "iocs": det.iocs if det else [], "profile": det.profile if det else "",
+                  "normalizations": ing.normalizations if ing else [],
+                  "limitations": ing.limitations if ing else []}
+    report.executive_md = reports.build_executive(report_ctx)
+    report.technical_md = reports.build_technical(report_ctx)
+
+    # --- Única llamada a IA: pulir ambos informes. Si falla (429/504), se queda el de código ---
+    if client.mode == "live":
+        rblock = (f"=== INFORME EJECUTIVO BASE ===\n{report.executive_md}\n\n"
+                  f"=== INFORME TÉCNICO BASE ===\n{report.technical_md}")
+        raw = client.generate(sys_base + "\n" + prompts.REDACTOR_DUAL, rblock,
+                              mock_hint={"ejecutivo_md": report.executive_md,
+                                         "tecnico_md": report.technical_md})
+        out = parse_strict_json(raw)
+        if out and out.get("ejecutivo_md") and out.get("tecnico_md"):
+            cite = validate_citations(raw, valid_ids)
+            if cite["ok"]:
+                report.executive_md = out["ejecutivo_md"]
+                report.technical_md = out["tecnico_md"]
+            else:
+                security_log.append({"type": "invalid_citation_blocked",
+                                     "role": "REDACTOR_DUAL", "invalid": cite["invalid"]})
 
     if client.last_error:
         security_log.append({"type": "ai_fallback", "note": client.last_error})

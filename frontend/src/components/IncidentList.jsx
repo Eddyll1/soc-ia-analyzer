@@ -33,6 +33,34 @@ function Incident({ inc }) {
               </div>
             </div>
           )}
+          {inc.affected && (
+            <div className="bg-slate-950/40 border border-slate-800 rounded p-2 text-sm">
+              <div className="text-xs text-slate-400 mb-1">Entidades afectadas (para contención)</div>
+              <div className="grid md:grid-cols-3 gap-2">
+                <div>
+                  <div className="text-xs text-slate-500">Hosts a aislar</div>
+                  {(inc.affected.hosts || []).map((h) => (
+                    <div key={h} className="font-mono text-slate-200">
+                      {h}
+                      {inc.affected.host_ips?.[h]?.length > 0 &&
+                        <span className="text-slate-500"> · {inc.affected.host_ips[h].join(', ')}</span>}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">Usuarios a resetear</div>
+                  <div className="font-mono text-slate-200">{(inc.affected.users || []).join(', ') || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500">IPs externas a bloquear</div>
+                  <div className="font-mono text-red-300">{(inc.affected.external_ips || []).join(', ') || '—'}</div>
+                  {inc.affected.exfil_dest?.length > 0 && (
+                    <div className="text-xs text-slate-500 mt-1">Exfil → <span className="text-red-300 font-mono">{inc.affected.exfil_dest.join(', ')}</span></div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {inc.impact && <div className="text-sm"><span className="text-slate-400">Impacto: </span>{inc.impact}</div>}
           {inc.ai_narrative && (
             <div className="bg-sky-950/30 border border-sky-900/50 rounded p-2">

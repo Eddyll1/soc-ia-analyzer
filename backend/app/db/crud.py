@@ -97,7 +97,7 @@ def save_analysis_result(db: Session, analysis_id: int, *, det, incidents,
             headline=n.get("headline"), window=n.get("window"),
             ai_narrative=n.get("ai_narrative"), phases_json=_json_safe(n.get("phases")),
             timeline_json=_json_safe(n.get("timeline")), event_count=n.get("event_count"),
-            entities_json=_json_safe(inc.entities), evidence_json=inc.evidence(),
+            entities_json=_json_safe(n.get("affected")), evidence_json=inc.evidence(),
             justification=c.get("justification"), impact=c.get("impact"),
             recommended_action=c.get("recommended_action")))
 
@@ -129,7 +129,7 @@ def get_full_analysis(db: Session, analysis_id: int) -> dict | None:
         "incidents": [{"code": i.code, "severity": i.severity, "headline": i.headline,
                        "window": i.window, "ai_narrative": i.ai_narrative, "phases": i.phases_json,
                        "timeline": i.timeline_json, "event_count": i.event_count,
-                       "entities": i.entities_json, "evidence": i.evidence_json,
+                       "affected": i.entities_json, "evidence": i.evidence_json,
                        "justification": i.justification, "impact": i.impact,
                        "recommended_action": i.recommended_action}
                       for i in a.incidents],

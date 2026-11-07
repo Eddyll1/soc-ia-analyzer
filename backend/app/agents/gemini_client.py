@@ -17,8 +17,9 @@ import time
 
 # Preferencia de modelos: del más capaz/eco al genérico. Se cruza con los que
 # la cuenta tiene realmente disponibles (los nombres cambian entre versiones).
-_MODEL_PREFERENCE = ("flash-latest", "2.5-flash", "2.0-flash", "flash",
-                     "pro-latest", "2.5-pro", "pro")
+# Preferimos *flash-lite* primero: en free tier tiene mayor cuota (≈15 RPM vs 5).
+_MODEL_PREFERENCE = ("2.5-flash-lite", "flash-lite", "flash-latest", "2.5-flash",
+                     "2.0-flash", "flash", "pro")
 
 
 class GeminiClient:
@@ -88,7 +89,10 @@ class GeminiClient:
 
     @staticmethod
     def _mock(system: str, hint: dict) -> str:
-        """Informe de respaldo construido desde el contexto (no depende de la nube)."""
+        """Respaldo sin nube. Para el editor dual, devuelve los informes base intactos."""
+        if "ejecutivo_md" in hint and "tecnico_md" in hint:
+            return json.dumps({"ejecutivo_md": hint["ejecutivo_md"],
+                               "tecnico_md": hint["tecnico_md"]}, ensure_ascii=False)
         incs = hint.get("incidentes", [])
         es_ejec = "ejecutivo" in system or "Ejecutivo" in system
         if es_ejec:

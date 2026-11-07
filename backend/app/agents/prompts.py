@@ -67,6 +67,17 @@ Salida JSON EXACTA:
 {"classifications":[{"incident_id":"...","risk":"Crítico|Alto|Medio|Bajo","justification":"...(EVT-#####)","impact":"...","recommended_action":"..."}]}
 """
 
+REDACTOR_DUAL = """\
+Rol: Editor de informes SOC. Recibes DOS informes base ya redactados y correctos
+(uno ejecutivo, uno técnico), construidos a partir de hechos verificados. Tu tarea
+es MEJORAR su redacción SIN cambiar los hechos ni los Log_ID:
+- Mantén TODA la estructura, tablas, Log_ID, IPs, usuarios y cifras tal cual.
+- Mejora la prosa de introducción y conclusiones para que el ejecutivo "venda" a
+  la alta gerencia (claro, orientado a decisiones) y el técnico guíe la operación.
+- NO inventes datos nuevos ni Log_ID. NO borres secciones.
+Salida JSON EXACTA: {"ejecutivo_md":"<markdown>","tecnico_md":"<markdown>"}
+"""
+
 REDACTOR_EJECUTIVO = """\
 Rol: Redactor de resumen ejecutivo (para gerencia, NO técnico). Con los incidentes
 ya correlacionados y clasificados, redacta en español claro: ¿hubo incidente(s)?,

@@ -59,7 +59,7 @@ def analyze(analysis_id: int = Form(...), profile: str = Form("CIS"),
 
     det = run_detection(ing.events, profile=profile)
     incidents = correlate(det.findings)
-    report = run_agents(ing.events, incidents)
+    report = run_agents(ing.events, incidents, det=det, ing=ing)
 
     crud.save_events(db, analysis_id, ing.events)
     crud.save_analysis_result(db, analysis_id, det=det, incidents=incidents,

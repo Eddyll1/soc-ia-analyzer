@@ -40,6 +40,24 @@ def _evidence_rows(df: pd.DataFrame, log_ids: list[str]) -> pd.DataFrame:
     return df[df["Log_ID"].isin(log_ids)]
 
 
+def _build_timeline(df: pd.DataFrame, log_ids: list[str]) -> list[dict]:
+    """Línea de tiempo determinística con fecha/hora REALES (no las inventa la IA)."""
+    rows = _evidence_rows(df, log_ids).sort_values("Timestamp")
+    tl: list[dict] = []
+    for _, r in rows.iterrows():
+        ts = r.get("Timestamp")
+        tl.append({
+            "ts": ts.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(ts) else None,
+            "log_id": r.get("Log_ID"),
+            "host": r.get("Host_Normalized"),
+            "user": r.get("User_Normalized"),
+            "event_id": r.get("Event_ID"),
+            "src_ip": r.get("Source_IP"),
+            "fact": neutralize(r.get("Event_Description"))[:160],
+        })
+    return tl
+
+
 def _sanitize_payload(df: pd.DataFrame, incidents: list[Incident], sentinel: str,
                       security_log: list[dict]) -> tuple[str, list[dict], set[str]]:
     """Construye el bloque de datos saneado y detecta inyecciones en los logs."""
@@ -104,7 +122,18 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
     report = AgentReport(mode=client.mode)
 
     corr = _call(prompts.CORRELATOR, {"incidents": hint_incidents})
-    report.incidents = corr.get("incidents", []) if corr else []
+    narr_by_inc = {i.get("id"): i for i in (corr.get("incidents", []) if corr else [])}
+    # La línea de tiempo (con horas reales) la fija el CÓDIGO; la IA solo narra.
+    report.incidents = []
+    for inc in incidents:
+        n = narr_by_inc.get(inc.id, {})
+        report.incidents.append({
+            "id": inc.id,
+            "narrative": n.get("narrative", ""),
+            "mitre": n.get("mitre", []),
+            "confidence": n.get("confidence"),
+            "timeline": _build_timeline(df, inc.evidence()),
+        })
 
     cls = _call(prompts.CLASSIFIER, {"incidents": hint_incidents})
     raw_cls = cls.get("classifications", []) if cls else []

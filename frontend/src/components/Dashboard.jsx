@@ -1,8 +1,14 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, CartesianGrid,
+  PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend,
 } from 'recharts'
 import { sevColor } from '../lib/format'
+
+const TOOLTIP = {
+  contentStyle: { background: '#0f172a', border: '1px solid #334155', borderRadius: 6 },
+  itemStyle: { color: '#f1f5f9' },
+  labelStyle: { color: '#f1f5f9' },
+}
 
 const Card = ({ label, value, color }) => (
   <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
@@ -45,7 +51,7 @@ export default function Dashboard({ data }) {
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="hour" stroke="#64748b" fontSize={11} />
               <YAxis stroke="#64748b" fontSize={11} />
-              <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
+              <Tooltip {...TOOLTIP} />
               <Line type="monotone" dataKey="n" stroke="#38bdf8" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -54,10 +60,13 @@ export default function Dashboard({ data }) {
         <Panel title="Incidentes por criticidad">
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={sevData} dataKey="value" nameKey="name" outerRadius={80} label>
+              <Pie data={sevData} dataKey="value" nameKey="name" outerRadius={75}
+                label={({ name, value }) => `${name}: ${value}`} labelLine={{ stroke: '#64748b' }}>
                 {sevData.map((e) => <Cell key={e.name} fill={sevColor(e.name)} />)}
               </Pie>
-              <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
+              <Tooltip {...TOOLTIP} />
+              <Legend verticalAlign="bottom" height={28}
+                formatter={(v) => <span style={{ color: sevColor(v) }}>{v}</span>} />
             </PieChart>
           </ResponsiveContainer>
         </Panel>
@@ -67,7 +76,7 @@ export default function Dashboard({ data }) {
             <BarChart data={byEvent} layout="vertical" margin={{ left: 20 }}>
               <XAxis type="number" stroke="#64748b" fontSize={11} />
               <YAxis type="category" dataKey="id" stroke="#64748b" fontSize={11} width={90} />
-              <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155' }} />
+              <Tooltip {...TOOLTIP} />
               <Bar dataKey="n" fill="#818cf8" />
             </BarChart>
           </ResponsiveContainer>

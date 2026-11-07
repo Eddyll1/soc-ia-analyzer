@@ -14,28 +14,52 @@ import json
 import os
 
 
+# Preferencia de modelos: del más capaz/eco al genérico. Se cruza con los que
+# la cuenta tiene realmente disponibles (los nombres cambian entre versiones).
+_MODEL_PREFERENCE = ("flash-latest", "2.5-flash", "2.0-flash", "flash",
+                     "pro-latest", "2.5-pro", "pro")
+
+
 class GeminiClient:
     def __init__(self, model: str | None = None):
-        self.model_name = model or os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        # Vacío = autodescubrir. La key nueva de AI Studio empieza con "AQ." o "AIza";
+        # ambos formatos son válidos, no se valida por prefijo.
+        self.model_name = model or os.getenv("GEMINI_MODEL", "")
         self.api_key = os.getenv("GEMINI_API_KEY")
         self._model = None
         self.mode = "mock"
         self.last_error: str | None = None
         if self.api_key:
-            # Las API keys de Google AI Studio empiezan con "AIza". Si no, avisamos
-            # (suele ser un token OAuth pegado por error), pero igual intentamos.
-            if not self.api_key.startswith("AIza"):
-                self.last_error = ("La GEMINI_API_KEY no parece una API key de AI Studio "
-                                   "(deberían empezar con 'AIza').")
             try:
                 import google.generativeai as genai  # type: ignore
                 genai.configure(api_key=self.api_key)
                 self._genai = genai
+                self.model_name = self._resolve_model(self.model_name)
                 self._model = genai.GenerativeModel(self.model_name)
                 self.mode = "live"
             except Exception as e:
                 self.mode = "mock"
                 self.last_error = f"No se pudo inicializar Gemini: {e}"
+
+    def _resolve_model(self, preferred: str) -> str:
+        """Elige un modelo que exista en la cuenta y soporte generateContent."""
+        try:
+            available = [m.name.split("/")[-1] for m in self._genai.list_models()
+                         if "generateContent" in getattr(m, "supported_generation_methods", [])]
+        except Exception:
+            return preferred or "gemini-2.0-flash"
+        if not available:
+            return preferred or "gemini-2.0-flash"
+        if preferred and preferred in available:
+            return preferred
+        if preferred:                       # el pedido no existe → avisamos y seguimos
+            self.last_error = (f"Modelo '{preferred}' no disponible; se usa uno vigente. "
+                               f"Disponibles (flash/pro): {', '.join(available[:6])}")
+        for pat in _MODEL_PREFERENCE:
+            for m in available:
+                if pat in m:
+                    return m
+        return available[0]
 
     def generate(self, system: str, data_block: str, *, mock_hint: dict | None = None) -> str:
         """Devuelve el texto crudo del modelo. Si la llamada live falla, cae a mock."""

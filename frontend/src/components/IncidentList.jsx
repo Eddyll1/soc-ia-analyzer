@@ -29,13 +29,18 @@ function Incident({ inc }) {
           )}
           {inc.timeline?.length > 0 && (
             <div>
-              <div className="text-xs text-slate-400 mb-1">Línea de tiempo</div>
-              <div className="space-y-1">
+              <div className="text-xs text-slate-400 mb-1">Línea de tiempo ({inc.timeline.length} eventos)</div>
+              <div className="space-y-1 max-h-96 overflow-y-auto pr-1">
                 {inc.timeline.map((t, i) => (
-                  <div key={i} className="text-xs flex gap-2">
+                  <div key={i} className="text-xs grid grid-cols-[130px_80px_70px_1fr] gap-2 items-baseline border-b border-slate-800/50 py-0.5">
+                    <span className="font-mono text-amber-300 shrink-0">{t.ts || '—'}</span>
                     <span className="font-mono text-sky-400 shrink-0">{t.log_id}</span>
-                    <span className="text-slate-500 shrink-0">{t.phase}</span>
-                    <span className="text-slate-300">{t.fact}</span>
+                    <span className="font-mono text-slate-500 shrink-0">{t.event_id}</span>
+                    <span className="text-slate-300">
+                      {t.host && <span className="text-slate-500">{t.host} · </span>}
+                      {t.fact}
+                      {t.src_ip && <span className="text-slate-500"> ({t.src_ip})</span>}
+                    </span>
                   </div>
                 ))}
               </div>

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 
 # Preferencia de modelos: del más capaz/eco al genérico. Se cruza con los que
@@ -62,42 +63,54 @@ class GeminiClient:
         return available[0]
 
     def generate(self, system: str, data_block: str, *, mock_hint: dict | None = None) -> str:
-        """Devuelve el texto crudo del modelo. Si la llamada live falla, cae a mock."""
+        """Devuelve el texto crudo del modelo. Reintenta 1 vez ante errores
+        transitorios (503/504/timeout); si aun así falla, cae a mock."""
         if self.mode == "live":
-            try:
-                cfg = self._genai.types.GenerationConfig(
-                    temperature=0.1, response_mime_type="application/json",
-                )
-                resp = self._model.generate_content(
-                    [system, data_block], generation_config=cfg,
-                    request_options={"timeout": 120},
-                )
-                return resp.text or ""
-            except Exception as e:
-                # Una key inválida o un fallo de red no debe tumbar el análisis.
-                self.last_error = f"Fallo en llamada a Gemini: {e}"
-                self.mode = "mock"
+            for attempt in range(2):
+                try:
+                    cfg = self._genai.types.GenerationConfig(
+                        temperature=0.2, response_mime_type="application/json",
+                    )
+                    resp = self._model.generate_content(
+                        [system, data_block], generation_config=cfg,
+                        request_options={"timeout": 90},
+                    )
+                    return resp.text or ""
+                except Exception as e:
+                    msg = str(e)
+                    transient = any(x in msg for x in ("503", "504", "Deadline", "timeout", "Timeout"))
+                    if attempt == 0 and transient:
+                        time.sleep(3)
+                        continue
+                    self.last_error = f"Fallo en llamada a Gemini: {e}"
+                    self.mode = "mock"
         return self._mock(system, mock_hint or {})
 
     @staticmethod
     def _mock(system: str, hint: dict) -> str:
-        """Salida mock válida por tipo de agente (se detecta por el rol en 'system')."""
-        if "Correlacionador" in system:
-            return json.dumps({"incidents": [
-                {"id": i["id"],
-                 "narrative": f"Cadena observada en {', '.join(i.get('hosts', [])) or 'el entorno'}.",
-                 "timeline": [{"log_id": e, "phase": "—", "fact": "evento citado"}
-                              for e in i.get("evidence", [])[:8]],
-                 "mitre": [], "confidence": "media", "injection_flags": i.get("injection_flags", [])}
-                for i in hint.get("incidents", [])]}, ensure_ascii=False)
-        if "Clasificador" in system:
-            return json.dumps({"classifications": [
-                {"incident_id": i["id"], "risk": i.get("severity_hint_es", "Medio"),
-                 "justification": f"Factor decisivo en {i.get('evidence', ['?'])[0]}.",
-                 "impact": "Ver evidencia.", "recommended_action": "Contener y revisar."}
-                for i in hint.get("incidents", [])]}, ensure_ascii=False)
-        if "ejecutivo" in system or "Ejecutivo" in system:
-            return json.dumps({"markdown": "# Resumen ejecutivo\n\n(generado en modo mock)"},
-                              ensure_ascii=False)
-        return json.dumps({"markdown": "# Informe técnico\n\n(generado en modo mock)"},
-                          ensure_ascii=False)
+        """Informe de respaldo construido desde el contexto (no depende de la nube)."""
+        incs = hint.get("incidentes", [])
+        es_ejec = "ejecutivo" in system or "Ejecutivo" in system
+        if es_ejec:
+            lines = ["# Resumen ejecutivo", "",
+                     f"Se identificaron **{len(incs)} incidente(s)** de seguridad.", ""]
+            for i in incs:
+                lines += [f"## {i['id']} — Riesgo {i.get('riesgo', '?')}",
+                          f"{i.get('titular', '')}", f"*Ventana:* {i.get('ventana', '')}", ""]
+            lines += ["## Acciones recomendadas",
+                      "- Contener los hosts e IPs afectados.",
+                      "- Resetear las cuentas comprometidas.",
+                      "- Erradicar persistencia detectada."]
+            return json.dumps({"markdown": "\n".join(lines)}, ensure_ascii=False)
+        # técnico
+        lines = ["# Informe técnico de incidentes", ""]
+        for i in incs:
+            lines += [f"## {i['id']} — Riesgo {i.get('riesgo', '?')}",
+                      f"**Resumen:** {i.get('titular', '')}  ",
+                      f"**Ventana:** {i.get('ventana', '')}", "", "### Fases del ataque", ""]
+            for p in i.get("fases", []):
+                rango = f"{p.get('t0', '')}–{p.get('t1', '')}"
+                ev = ", ".join(p.get("evidence", [])[:4])
+                lines.append(f"- **{p['phase']}** ({rango}): {p['detail']} _[{ev}]_")
+            lines.append("")
+        return json.dumps({"markdown": "\n".join(lines)}, ensure_ascii=False)

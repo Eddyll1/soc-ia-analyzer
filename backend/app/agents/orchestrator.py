@@ -89,25 +89,97 @@ def _collapse_milestones(timeline: list[dict]) -> list[dict]:
     return ms
 
 
-def _narrative(incident: Incident, timeline: list[dict]) -> str:
-    """Relato en cadena construido por código (hechos, no inventado por la IA)."""
-    t0 = timeline[0]["ts"] if timeline else "?"
-    t1 = timeline[-1]["ts"] if timeline else "?"
-    by_rule = {}
+# Fases tipo kill-chain, en orden. Cada regla cae en una fase.
+_PHASE_DEF = [
+    (["WEB_ATTACK", "WEB_SHELL"], "Ataque web"),
+    (["BRUTE_FORCE_SPRAY", "BRUTE_FORCE"], "Acceso inicial — fuerza bruta"),
+    (["SUCCESS_AFTER_FAILS"], "Compromiso de credencial"),
+    (["PRIV_ESCALATION"], "Escalada de privilegios"),
+    (["SUSPICIOUS_EXEC"], "Ejecución de código"),
+    (["DISCOVERY"], "Descubrimiento"),
+    (["LATERAL_MOVEMENT"], "Movimiento lateral"),
+    (["PERSIST_SERVICE", "PERSIST_TASK"], "Persistencia"),
+    (["DATA_COLLECTION"], "Colección de datos sensibles"),
+    (["STAGING_EXFIL", "OUTBOUND_EXFIL"], "Exfiltración"),
+]
+
+
+def _ent_values(findings, *keys) -> list[str]:
+    """Reúne valores de entidad (escalares o listas) de un conjunto de hallazgos."""
+    out: list[str] = []
+    for f in findings:
+        for k in keys:
+            v = f.entity.get(k)
+            if isinstance(v, list):
+                out += [str(x) for x in v]
+            elif v not in (None, "-", True, False):
+                out.append(str(v))
+    seen, uniq = set(), []
+    for x in out:
+        if x not in seen:
+            seen.add(x); uniq.append(x)
+    return uniq
+
+
+def _phase_detail(label: str, findings: list) -> str:
+    """Detalle conciso por fase: lo esencial, no cada evento."""
+    users = _ent_values(findings, "user", "users")
+    hosts = _ent_values(findings, "host", "hosts", "to")
+    ips = _ent_values(findings, "src_ip", "src_ips")
+    dest = _ent_values(findings, "dest")
+    n_ev = sum(len(f.evidence) for f in findings)
+    if "fuerza bruta" in label:
+        tgts = _ent_values(findings, "targets")
+        return f"{n_ev} intentos desde {', '.join(ips) or '?'} contra {len(tgts) or '?'} usuario(s)."
+    if "Compromiso" in label:
+        return f"{len(findings)} cuenta(s) con login exitoso tras fallos: {', '.join(users[:6])}" + \
+               (f" (origen {', '.join(ips)})" if ips else "") + "."
+    if "Exfiltración" in label:
+        return f"Datos comprimidos y enviados a {', '.join(dest) or 'IP externa'}."
+    if "Movimiento lateral" in label:
+        froms = _ent_values(findings, "from")
+        return f"Salto de {', '.join(froms) or '?'} a {', '.join(hosts) or '?'}."
+    if "Ataque web" in label:
+        return f"Peticiones anómalas desde {', '.join(ips) or '?'} contra {', '.join(hosts) or '?'}."
+    # genérico
+    bits = []
+    if hosts:
+        bits.append(f"hosts: {', '.join(hosts[:5])}")
+    if users:
+        bits.append(f"usuarios: {', '.join(users[:5])}")
+    return f"{len(findings)} evento(s). " + "; ".join(bits) + "."
+
+
+def _narrative(incident: Incident, timeline: list[dict]) -> dict:
+    """Relato estructurado por fases (la pepa), construido por código."""
+    ts_of = {e["log_id"]: e["ts"] for e in timeline}
+    by_rule: dict[str, list] = {}
     for f in incident.findings:
         by_rule.setdefault(f.rule_id, []).append(f)
-    parts = [f"Incidente {incident.id}: actividad entre {t0} y {t1}."]
 
-    order = ["WEB_ATTACK", "WEB_SHELL", "BRUTE_FORCE_SPRAY", "BRUTE_FORCE",
-             "SUCCESS_AFTER_FAILS", "PRIV_ESCALATION", "SUSPICIOUS_EXEC",
-             "PERSIST_SERVICE", "PERSIST_TASK", "DISCOVERY", "LATERAL_MOVEMENT",
-             "DATA_COLLECTION", "STAGING_EXFIL", "OUTBOUND_EXFIL"]
-    for rid in order:
-        for f in by_rule.get(rid, []):
-            ev_ts = [e["ts"] for e in timeline if e["log_id"] in f.evidence]
-            span = f" ({ev_ts[0]}→{ev_ts[-1]})" if len(ev_ts) > 1 else (f" ({ev_ts[0]})" if ev_ts else "")
-            parts.append(f"{f.summary}{span} [{', '.join(f.evidence[:3])}{'…' if len(f.evidence) > 3 else ''}].")
-    return " ".join(parts)
+    phases = []
+    for rule_ids, label in _PHASE_DEF:
+        fs = [f for rid in rule_ids for f in by_rule.get(rid, [])]
+        if not fs:
+            continue
+        ev_ts = sorted(t for f in fs for e in f.evidence if (t := ts_of.get(e)))
+        phases.append({
+            "phase": label,
+            "t0": ev_ts[0] if ev_ts else None,
+            "t1": ev_ts[-1] if ev_ts else None,
+            "detail": _phase_detail(label, fs),
+            "evidence": sorted({e for f in fs for e in f.evidence}),
+        })
+
+    t0 = timeline[0]["ts"] if timeline else "?"
+    t1 = timeline[-1]["ts"] if timeline else "?"
+    chain = " → ".join(p["phase"].split(" — ")[0] for p in phases)
+    ext_ips = [ip for ip in _ent_values(incident.findings, "src_ip", "src_ips")
+               if not ip.startswith("10.")]
+    headline = f"{chain}." if chain else "Actividad anómala."
+    if ext_ips:
+        headline += f" Origen externo: {', '.join(ext_ips[:3])}."
+    return {"headline": headline, "window": f"{t0} — {t1}", "phases": phases}
 
 
 def _sanitize_payload(incidents: list[Incident], timelines: dict, sentinel: str,
@@ -178,38 +250,41 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
 
     report = AgentReport(mode=client.mode)
 
-    corr = _call(prompts.CORRELATOR, {"incidents": hint_incidents})
-    narr_by_inc = {i.get("id"): i for i in (corr.get("incidents", []) if corr else [])}
-    # La línea de tiempo (con horas reales) la fija el CÓDIGO; la IA solo narra.
+    # --- Narrativa y clasificación: DETERMINÍSTICAS (sin IA) ---
+    # El código ya correlacionó y narró; la severidad sale del piso de reglas.
     report.incidents = []
+    report.classifications = []
+    rule_by_inc = {h["id"]: h["rule_ids"] for h in hint_incidents}
+    _IMPACT = {"Crítico": "Compromiso con impacto en activos y posible exfiltración.",
+               "Alto": "Compromiso confirmado; contención urgente.",
+               "Medio": "Intento serio o anomalía; requiere revisión.",
+               "Bajo": "Actividad de bajo impacto / ruido probable."}
     for inc in incidents:
-        n = narr_by_inc.get(inc.id, {})
-        ai_narr = (n.get("narrative") or "").strip()
+        narr = code_narrative[inc.id]
+        risk, _ = enforce_severity_floor(rule_by_inc.get(inc.id, []), "")
         report.incidents.append({
             "id": inc.id,
-            "narrative": code_narrative[inc.id],       # relato factual (siempre)
-            "ai_narrative": ai_narr if client.mode == "live" else "",  # prosa IA (opcional)
-            "mitre": n.get("mitre", []),
-            "confidence": n.get("confidence"),
-            "timeline": milestones[inc.id],            # hitos condensados
+            "headline": narr["headline"],
+            "window": narr["window"],
+            "phases": narr["phases"],
+            "ai_narrative": "",                       # la IA la añade abajo si está live
+            "timeline": milestones[inc.id],
             "event_count": len(full_timelines[inc.id]),
         })
+        report.classifications.append({
+            "incident_id": inc.id, "risk": risk,
+            "justification": narr["headline"],
+            "impact": _IMPACT.get(risk, ""),
+            "recommended_action": "Contener hosts/IPs afectados, resetear cuentas comprometidas.",
+        })
 
-    cls = _call(prompts.CLASSIFIER, {"incidents": hint_incidents})
-    raw_cls = cls.get("classifications", []) if cls else []
-    rule_by_inc = {h["id"]: h["rule_ids"] for h in hint_incidents}
-    for c in raw_cls:
-        final, note = enforce_severity_floor(rule_by_inc.get(c.get("incident_id"), []),
-                                             c.get("risk", ""))
-        if note:
-            security_log.append({"type": "severity_floor_applied",
-                                 "incident_id": c.get("incident_id"), "note": note})
-        c["risk"] = final
-    report.classifications = raw_cls
-
-    ex = _call(prompts.REDACTOR_EJECUTIVO, {})
+    # --- Única parte con IA: redactar los dos informes (2 llamadas) ---
+    ctx = {"incidentes": [{"id": i["id"], "titular": i["headline"], "ventana": i["window"],
+                           "riesgo": next(c["risk"] for c in report.classifications if c["incident_id"] == i["id"]),
+                           "fases": i["phases"]} for i in report.incidents]}
+    ex = _call(prompts.REDACTOR_EJECUTIVO, ctx)
     report.executive_md = ex.get("markdown", "") if ex else ""
-    tec = _call(prompts.REDACTOR_TECNICO, {})
+    tec = _call(prompts.REDACTOR_TECNICO, ctx)
     report.technical_md = tec.get("markdown", "") if tec else ""
 
     if client.last_error:

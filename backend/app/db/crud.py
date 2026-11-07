@@ -74,7 +74,7 @@ def save_analysis_result(db: Session, analysis_id: int, *, det, incidents,
     a.security_log_json = report.security_log
 
     cls_by_inc = {c["incident_id"]: c for c in report.classifications}
-    narr_by_inc = {i["id"]: i for i in report.incidents}
+    inc_by_id = {i["id"]: i for i in report.incidents}
     max_rank, max_sev = 0, None
     rank = {"Crítico": 4, "Alto": 3, "Medio": 2, "Bajo": 1}
 
@@ -88,16 +88,18 @@ def save_analysis_result(db: Session, analysis_id: int, *, det, incidents,
 
     for inc in incidents:
         c = cls_by_inc.get(inc.id, {})
-        n = narr_by_inc.get(inc.id, {})
+        n = inc_by_id.get(inc.id, {})
         sev = c.get("risk", "Medio")
         if rank.get(sev, 0) > max_rank:
             max_rank, max_sev = rank[sev], sev
         db.add(models.Incident(
             analysis_id=analysis_id, code=inc.id, severity=sev,
-            confidence=n.get("confidence"), narrative=n.get("narrative"),
-            mitre_json=n.get("mitre"), timeline_json=n.get("timeline"),
+            headline=n.get("headline"), window=n.get("window"),
+            ai_narrative=n.get("ai_narrative"), phases_json=_json_safe(n.get("phases")),
+            timeline_json=_json_safe(n.get("timeline")), event_count=n.get("event_count"),
             entities_json=_json_safe(inc.entities), evidence_json=inc.evidence(),
-            justification=c.get("justification"), recommended_action=c.get("recommended_action")))
+            justification=c.get("justification"), impact=c.get("impact"),
+            recommended_action=c.get("recommended_action")))
 
     a.max_severity = max_sev
     for ioc in det.iocs:
@@ -124,10 +126,12 @@ def get_full_analysis(db: Session, analysis_id: int) -> dict | None:
         "findings": [{"rule_id": f.rule_id, "title": f.title, "severity_hint": f.severity_hint,
                       "incident_id": f.incident_id, "evidence": f.evidence_json,
                       "summary": f.summary, "entity": f.entity_json} for f in a.findings],
-        "incidents": [{"code": i.code, "severity": i.severity, "confidence": i.confidence,
-                       "narrative": i.narrative, "mitre": i.mitre_json, "timeline": i.timeline_json,
+        "incidents": [{"code": i.code, "severity": i.severity, "headline": i.headline,
+                       "window": i.window, "ai_narrative": i.ai_narrative, "phases": i.phases_json,
+                       "timeline": i.timeline_json, "event_count": i.event_count,
                        "entities": i.entities_json, "evidence": i.evidence_json,
-                       "justification": i.justification, "recommended_action": i.recommended_action}
+                       "justification": i.justification, "impact": i.impact,
+                       "recommended_action": i.recommended_action}
                       for i in a.incidents],
         "iocs": [{"type": i.type, "value": i.value, "context": i.context} for i in a.iocs],
         "reports": {r.kind: r.content_md for r in a.reports},

@@ -75,15 +75,17 @@ class Incident(Base):
     id = Column(Integer, primary_key=True)
     analysis_id = Column(Integer, ForeignKey("analysis.id"), index=True)
     code = Column(String)                  # INC-A, INC-B...
-    title = Column(String, nullable=True)
     severity = Column(String)
-    confidence = Column(String, nullable=True)
-    narrative = Column(Text, nullable=True)
-    mitre_json = Column(JSON, nullable=True)
-    timeline_json = Column(JSON, nullable=True)
+    headline = Column(Text, nullable=True)     # titular / "la pepa"
+    window = Column(String, nullable=True)     # rango temporal del incidente
+    ai_narrative = Column(Text, nullable=True)  # prosa de la IA (opcional)
+    phases_json = Column(JSON, nullable=True)  # fases del ataque (código)
+    timeline_json = Column(JSON, nullable=True)  # hitos condensados
+    event_count = Column(Integer, nullable=True)
     entities_json = Column(JSON, nullable=True)
     evidence_json = Column(JSON, nullable=True)
     justification = Column(Text, nullable=True)
+    impact = Column(Text, nullable=True)
     recommended_action = Column(Text, nullable=True)
 
     analysis = relationship("Analysis", back_populates="incidents")

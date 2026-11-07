@@ -5,38 +5,43 @@ function Incident({ inc }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-4 text-left">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-sky-400">{inc.code}</span>
-          <span className="px-2 py-0.5 rounded text-xs font-medium" style={sevBadge(inc.severity)}>{inc.severity}</span>
-          <span className="text-sm text-slate-300">{inc.narrative?.slice(0, 80) || 'Incidente correlacionado'}</span>
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-4 text-left gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-mono text-sky-400 shrink-0">{inc.code}</span>
+          <span className="px-2 py-0.5 rounded text-xs font-medium shrink-0" style={sevBadge(inc.severity)}>{inc.severity}</span>
+          <span className="text-sm text-slate-300 truncate">{inc.headline || 'Incidente correlacionado'}</span>
         </div>
-        <span className="text-slate-500 text-sm">{inc.evidence?.length || 0} eventos · {open ? '▲' : '▼'}</span>
+        <span className="text-slate-500 text-sm shrink-0">{inc.event_count ?? (inc.evidence?.length || 0)} eventos · {open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-slate-800 pt-3">
-          {inc.narrative && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <span className="text-slate-200 font-medium">{inc.headline}</span>
+            {inc.window && <span className="text-slate-500">🕐 {inc.window}</span>}
+          </div>
+          {inc.phases?.length > 0 && (
             <div>
-              <div className="text-xs text-slate-400 mb-1">Resumen del incidente</div>
-              <p className="text-sm text-slate-200 leading-relaxed">{inc.narrative}</p>
+              <div className="text-xs text-slate-400 mb-1">Fases del ataque</div>
+              <div className="space-y-1.5">
+                {inc.phases.map((p, i) => (
+                  <div key={i} className="flex gap-2 text-sm">
+                    <span className="text-amber-300 font-mono text-xs shrink-0 w-28">{p.t0?.slice(11) || ''}{p.t1 && p.t1 !== p.t0 ? `–${p.t1.slice(11)}` : ''}</span>
+                    <span className="shrink-0 font-medium text-slate-200 w-48">{p.phase}</span>
+                    <span className="text-slate-400">{p.detail}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+          {inc.impact && <div className="text-sm"><span className="text-slate-400">Impacto: </span>{inc.impact}</div>}
           {inc.ai_narrative && (
             <div className="bg-sky-950/30 border border-sky-900/50 rounded p-2">
               <div className="text-xs text-sky-400 mb-1">Narrativa IA (Gemini)</div>
               <p className="text-sm text-slate-200 leading-relaxed">{inc.ai_narrative}</p>
             </div>
           )}
-          {inc.justification && (
-            <div className="text-sm"><span className="text-slate-400">Clasificación: </span>{inc.justification}</div>
-          )}
           {inc.recommended_action && (
             <div className="text-sm"><span className="text-slate-400">Acción: </span>{inc.recommended_action}</div>
-          )}
-          {inc.mitre?.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {inc.mitre.map((m) => <span key={m} className="text-xs font-mono bg-slate-800 px-2 py-0.5 rounded">{m}</span>)}
-            </div>
           )}
           {inc.timeline?.length > 0 && (
             <div>

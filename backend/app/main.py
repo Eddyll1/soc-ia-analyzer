@@ -33,7 +33,8 @@ def _startup() -> None:
 def health() -> dict:
     """Estado del backend y si la IA está conectada a Gemini o en modo mock."""
     c = GeminiClient()
-    return {"status": "ok", "ai_mode": c.mode, "ai_model": c.model_name}
+    return {"status": "ok", "ai_mode": c.mode, "ai_model": c.model_name,
+            "ai_note": c.last_error}
 
 
 app.include_router(router)

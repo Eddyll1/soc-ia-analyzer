@@ -20,26 +20,39 @@ class GeminiClient:
         self.api_key = os.getenv("GEMINI_API_KEY")
         self._model = None
         self.mode = "mock"
+        self.last_error: str | None = None
         if self.api_key:
+            # Las API keys de Google AI Studio empiezan con "AIza". Si no, avisamos
+            # (suele ser un token OAuth pegado por error), pero igual intentamos.
+            if not self.api_key.startswith("AIza"):
+                self.last_error = ("La GEMINI_API_KEY no parece una API key de AI Studio "
+                                   "(deberían empezar con 'AIza').")
             try:
                 import google.generativeai as genai  # type: ignore
                 genai.configure(api_key=self.api_key)
                 self._genai = genai
                 self._model = genai.GenerativeModel(self.model_name)
                 self.mode = "live"
-            except Exception:
+            except Exception as e:
                 self.mode = "mock"
+                self.last_error = f"No se pudo inicializar Gemini: {e}"
 
     def generate(self, system: str, data_block: str, *, mock_hint: dict | None = None) -> str:
-        """Devuelve el texto crudo del modelo (se valida después, fuera de aquí)."""
+        """Devuelve el texto crudo del modelo. Si la llamada live falla, cae a mock."""
         if self.mode == "live":
-            cfg = self._genai.types.GenerationConfig(
-                temperature=0.1, response_mime_type="application/json",
-            )
-            resp = self._model.generate_content(
-                [system, data_block], generation_config=cfg, request_options={"timeout": 60},
-            )
-            return resp.text or ""
+            try:
+                cfg = self._genai.types.GenerationConfig(
+                    temperature=0.1, response_mime_type="application/json",
+                )
+                resp = self._model.generate_content(
+                    [system, data_block], generation_config=cfg,
+                    request_options={"timeout": 60},
+                )
+                return resp.text or ""
+            except Exception as e:
+                # Una key inválida o un fallo de red no debe tumbar el análisis.
+                self.last_error = f"Fallo en llamada a Gemini: {e}"
+                self.mode = "mock"
         return self._mock(system, mock_hint or {})
 
     @staticmethod

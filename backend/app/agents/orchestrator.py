@@ -123,5 +123,8 @@ def run_agents(df: pd.DataFrame, incidents: list[Incident],
     tec = _call(prompts.REDACTOR_TECNICO, {})
     report.technical_md = tec.get("markdown", "") if tec else ""
 
+    if client.last_error:
+        security_log.append({"type": "ai_fallback", "note": client.last_error})
+    report.mode = client.mode
     report.security_log = security_log
     return report

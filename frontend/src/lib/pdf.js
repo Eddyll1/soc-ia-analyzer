@@ -5,12 +5,14 @@ import { marked } from 'marked'
 export async function exportMarkdownToPdf(markdown, filename) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const container = document.createElement('div')
+  container.className = 'report-body'      // hereda la paleta corporativa
   container.style.width = '520px'
-  container.style.padding = '8px'
-  container.style.fontFamily = 'Helvetica, Arial, sans-serif'
+  container.style.padding = '12px'
   container.style.fontSize = '12px'
-  container.style.color = '#111'
-  container.innerHTML = marked.parse(markdown || '_Sin contenido_')
+  container.style.background = '#ffffff'
+  // quita los marcadores de gráfico (van en la vista web, no en el PDF de texto)
+  const clean = (markdown || '_Sin contenido_').replace(/\[GRAFICO:[^\]]+\]/g, '')
+  container.innerHTML = marked.parse(clean)
   document.body.appendChild(container)
   try {
     await doc.html(container, {

@@ -5,12 +5,24 @@
 :root { color-scheme: dark; }
 body { margin: 0; background: #0b1220; color: #e5e7eb; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
 
-.report-body h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 .5rem; }
-.report-body h2 { font-size: 1.2rem; font-weight: 600; margin: 1rem 0 .4rem; }
-.report-body h3 { font-size: 1.05rem; font-weight: 600; margin: .8rem 0 .3rem; }
-.report-body p { margin: .4rem 0; line-height: 1.5; }
+/* Paleta corporativa de informes: navy #1E3A8A, slate #334155, blanco, acentos */
+.report-body { background: #ffffff; color: #334155; font-family: "Segoe UI", Helvetica, Arial, sans-serif; }
+.report-body h1 { font-size: 1.6rem; font-weight: 700; color: #0F172A; margin: 0 0 .6rem;
+  border-bottom: 3px solid #1E3A8A; padding-bottom: .4rem; }
+.report-body h2 { font-size: 1.2rem; font-weight: 700; color: #1E3A8A; margin: 1.1rem 0 .4rem;
+  border-bottom: 1px solid #e2e8f0; padding-bottom: .2rem; }
+.report-body h3 { font-size: 1.02rem; font-weight: 600; color: #334155; margin: .8rem 0 .3rem; }
+.report-body p { margin: .4rem 0; line-height: 1.55; }
 .report-body ul, .report-body ol { margin: .4rem 0; padding-left: 1.4rem; }
-.report-body li { margin: .2rem 0; }
-.report-body code { background: #f1f5f9; padding: .1rem .3rem; border-radius: 3px; font-size: .85em; }
-.report-body table { border-collapse: collapse; margin: .6rem 0; width: 100%; }
-.report-body th, .report-body td { border: 1px solid #cbd5e1; padding: .3rem .5rem; text-align: left; font-size: .9em; }
+.report-body li { margin: .25rem 0; }
+.report-body strong { color: #1E3A8A; }
+.report-body hr { border: none; border-top: 2px solid #e2e8f0; margin: .8rem 0; }
+.report-body code { background: #f1f5f9; color: #0284C7; padding: .1rem .3rem; border-radius: 3px;
+  font-family: "Consolas", monospace; font-size: .85em; }
+.report-body pre { background: #0F172A; color: #e2e8f0; padding: .7rem .9rem; border-radius: 6px;
+  overflow-x: auto; margin: .6rem 0; }
+.report-body pre code { background: transparent; color: #e2e8f0; padding: 0; }
+.report-body table { border-collapse: collapse; margin: .7rem 0; width: 100%; font-size: .88em; }
+.report-body thead th { background: #1E3A8A; color: #ffffff; font-weight: 600; }
+.report-body th, .report-body td { border: 1px solid #cbd5e1; padding: .35rem .6rem; text-align: left; }
+.report-body tbody tr:nth-child(even) { background: #f8fafc; }

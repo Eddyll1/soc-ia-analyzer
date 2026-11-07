@@ -17,9 +17,10 @@ import time
 
 # Preferencia de modelos: del más capaz/eco al genérico. Se cruza con los que
 # la cuenta tiene realmente disponibles (los nombres cambian entre versiones).
-# Preferimos *flash-lite* primero: en free tier tiene mayor cuota (≈15 RPM vs 5).
-_MODEL_PREFERENCE = ("2.5-flash-lite", "flash-lite", "flash-latest", "2.5-flash",
-                     "2.0-flash", "flash", "pro")
+# Preferimos *flash-lite* vigente (mayor cuota en free tier, ≈15 RPM vs 5).
+# 2.5-flash-lite quedó retirado para cuentas nuevas → se evita; se prioriza el 3.x.
+_MODEL_PREFERENCE = ("3.5-flash-lite", "3.1-flash-lite", "flash-lite-latest",
+                     "flash-latest", "2.5-flash", "flash", "pro")
 
 
 class GeminiClient:
